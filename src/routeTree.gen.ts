@@ -10,6 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ServicesRouteImport } from './routes/services'
+import { Route as SalaryDividendRouteImport } from './routes/salary-dividend'
+import { Route as RrspFhsaRouteImport } from './routes/rrsp-fhsa'
+import { Route as PlannerRouteImport } from './routes/planner'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CalculatorRouteImport } from './routes/calculator'
 import { Route as BookRouteImport } from './routes/book'
@@ -18,10 +21,26 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
+import { Route as AuthenticatedAccountantRouteImport } from './routes/_authenticated/accountant'
 
 const ServicesRoute = ServicesRouteImport.update({
   id: '/services',
   path: '/services',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SalaryDividendRoute = SalaryDividendRouteImport.update({
+  id: '/salary-dividend',
+  path: '/salary-dividend',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RrspFhsaRoute = RrspFhsaRouteImport.update({
+  id: '/rrsp-fhsa',
+  path: '/rrsp-fhsa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlannerRoute = PlannerRouteImport.update({
+  id: '/planner',
+  path: '/planner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -63,6 +82,11 @@ const AuthenticatedPortalRoute = AuthenticatedPortalRouteImport.update({
   path: '/portal',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccountantRoute = AuthenticatedAccountantRouteImport.update({
+  id: '/accountant',
+  path: '/accountant',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -71,7 +95,11 @@ export interface FileRoutesByFullPath {
   '/book': typeof BookRoute
   '/calculator': typeof CalculatorRoute
   '/contact': typeof ContactRoute
+  '/planner': typeof PlannerRoute
+  '/rrsp-fhsa': typeof RrspFhsaRoute
+  '/salary-dividend': typeof SalaryDividendRoute
   '/services': typeof ServicesRoute
+  '/accountant': typeof AuthenticatedAccountantRoute
   '/portal': typeof AuthenticatedPortalRoute
 }
 export interface FileRoutesByTo {
@@ -81,7 +109,11 @@ export interface FileRoutesByTo {
   '/book': typeof BookRoute
   '/calculator': typeof CalculatorRoute
   '/contact': typeof ContactRoute
+  '/planner': typeof PlannerRoute
+  '/rrsp-fhsa': typeof RrspFhsaRoute
+  '/salary-dividend': typeof SalaryDividendRoute
   '/services': typeof ServicesRoute
+  '/accountant': typeof AuthenticatedAccountantRoute
   '/portal': typeof AuthenticatedPortalRoute
 }
 export interface FileRoutesById {
@@ -93,7 +125,11 @@ export interface FileRoutesById {
   '/book': typeof BookRoute
   '/calculator': typeof CalculatorRoute
   '/contact': typeof ContactRoute
+  '/planner': typeof PlannerRoute
+  '/rrsp-fhsa': typeof RrspFhsaRoute
+  '/salary-dividend': typeof SalaryDividendRoute
   '/services': typeof ServicesRoute
+  '/_authenticated/accountant': typeof AuthenticatedAccountantRoute
   '/_authenticated/portal': typeof AuthenticatedPortalRoute
 }
 export interface FileRouteTypes {
@@ -105,7 +141,11 @@ export interface FileRouteTypes {
     | '/book'
     | '/calculator'
     | '/contact'
+    | '/planner'
+    | '/rrsp-fhsa'
+    | '/salary-dividend'
     | '/services'
+    | '/accountant'
     | '/portal'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -115,7 +155,11 @@ export interface FileRouteTypes {
     | '/book'
     | '/calculator'
     | '/contact'
+    | '/planner'
+    | '/rrsp-fhsa'
+    | '/salary-dividend'
     | '/services'
+    | '/accountant'
     | '/portal'
   id:
     | '__root__'
@@ -126,7 +170,11 @@ export interface FileRouteTypes {
     | '/book'
     | '/calculator'
     | '/contact'
+    | '/planner'
+    | '/rrsp-fhsa'
+    | '/salary-dividend'
     | '/services'
+    | '/_authenticated/accountant'
     | '/_authenticated/portal'
   fileRoutesById: FileRoutesById
 }
@@ -138,6 +186,9 @@ export interface RootRouteChildren {
   BookRoute: typeof BookRoute
   CalculatorRoute: typeof CalculatorRoute
   ContactRoute: typeof ContactRoute
+  PlannerRoute: typeof PlannerRoute
+  RrspFhsaRoute: typeof RrspFhsaRoute
+  SalaryDividendRoute: typeof SalaryDividendRoute
   ServicesRoute: typeof ServicesRoute
 }
 
@@ -148,6 +199,27 @@ declare module '@tanstack/react-router' {
       path: '/services'
       fullPath: '/services'
       preLoaderRoute: typeof ServicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/salary-dividend': {
+      id: '/salary-dividend'
+      path: '/salary-dividend'
+      fullPath: '/salary-dividend'
+      preLoaderRoute: typeof SalaryDividendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rrsp-fhsa': {
+      id: '/rrsp-fhsa'
+      path: '/rrsp-fhsa'
+      fullPath: '/rrsp-fhsa'
+      preLoaderRoute: typeof RrspFhsaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/planner': {
+      id: '/planner'
+      path: '/planner'
+      fullPath: '/planner'
+      preLoaderRoute: typeof PlannerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -206,14 +278,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPortalRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/accountant': {
+      id: '/_authenticated/accountant'
+      path: '/accountant'
+      fullPath: '/accountant'
+      preLoaderRoute: typeof AuthenticatedAccountantRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAccountantRoute: typeof AuthenticatedAccountantRoute
   AuthenticatedPortalRoute: typeof AuthenticatedPortalRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAccountantRoute: AuthenticatedAccountantRoute,
   AuthenticatedPortalRoute: AuthenticatedPortalRoute,
 }
 
@@ -228,18 +309,11 @@ const rootRouteChildren: RootRouteChildren = {
   BookRoute: BookRoute,
   CalculatorRoute: CalculatorRoute,
   ContactRoute: ContactRoute,
+  PlannerRoute: PlannerRoute,
+  RrspFhsaRoute: RrspFhsaRoute,
+  SalaryDividendRoute: SalaryDividendRoute,
   ServicesRoute: ServicesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -189,6 +189,13 @@ function CalculatorPage() {
         A quick estimate of federal &amp; provincial tax, CPP and EI. For employment income.
         Not tax advice — book a consultation for an accurate picture.
       </p>
+
+      <nav className="mt-6 flex flex-wrap gap-2 text-sm">
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">Tax estimate</span>
+        <Link to="/rrsp-fhsa" className="rounded-full border border-border px-3 py-1 hover:bg-accent">RRSP / FHSA optimizer →</Link>
+        <Link to="/salary-dividend" className="rounded-full border border-border px-3 py-1 hover:bg-accent">Salary vs Dividend →</Link>
+        <Link to="/planner" className="rounded-full border border-border px-3 py-1 hover:bg-accent">AI tax plan →</Link>
+      </nav>
 
       <div className="mt-12 grid gap-10 lg:grid-cols-5">
         <div className="lg:col-span-2 space-y-6 rounded-2xl border border-border bg-card p-6">
