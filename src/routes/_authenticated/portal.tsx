@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { MapleLeaf } from "@/components/maple-leaf";
 import { toast } from "sonner";
-import { Download, FileText, Plus, Trash2, Upload } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/portal")({
   head: () => ({ meta: [{ title: "Client portal — Maple & Ledger" }] }),
@@ -39,6 +41,56 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   closed:     { label: "Closed",      tone: "bg-muted text-muted-foreground" },
 };
 
+const FILING_TYPES = [
+  "Personal T1 return",
+  "Corporate T2 return",
+  "GST/HST return",
+  "Payroll remittance",
+  "Cross-border (US/CA)",
+  "Other",
+];
+
+const CHECKLISTS: Record<string, string[]> = {
+  "Personal T1 return": [
+    "T4 slips (employment income)",
+    "T5/T3 slips (investment income)",
+    "RRSP contribution receipts",
+    "Medical / donation receipts",
+    "Tuition (T2202) if applicable",
+    "Rent or property tax statements",
+    "Prior-year Notice of Assessment",
+  ],
+  "Corporate T2 return": [
+    "Trial balance & general ledger",
+    "Bank statements (full year)",
+    "Accounts receivable / payable aging",
+    "Fixed asset additions & disposals",
+    "Prior-year T2 and NOA",
+    "Shareholder loan reconciliation",
+  ],
+  "GST/HST return": [
+    "Sales report for the period",
+    "Expense report with GST/HST paid",
+    "Prior GST/HST return",
+    "Bank reconciliation",
+  ],
+  "Payroll remittance": [
+    "Payroll register for the period",
+    "T4 summary YTD",
+    "CRA payroll account number",
+  ],
+  "Cross-border (US/CA)": [
+    "T4 / W-2 slips",
+    "Foreign tax credit documentation",
+    "Treaty residency details",
+    "Days-in-country log",
+  ],
+  Other: [
+    "Supporting documents",
+    "Prior correspondence with CRA",
+  ],
+};
+
 function Portal() {
   const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null);
@@ -46,7 +98,7 @@ function Portal() {
   const [filings, setFilings] = useState<Filing[]>([]);
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newOpen, setNewOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
 
   const refresh = useCallback(async (uid: string) => {
@@ -74,21 +126,6 @@ function Portal() {
     navigate({ to: "/" });
   }
 
-  async function createFiling(form: { tax_year: number; filing_type: string; notes: string }) {
-    if (!userId) return;
-    const { error } = await supabase.from("filings").insert({
-      user_id: userId,
-      tax_year: form.tax_year,
-      filing_type: form.filing_type,
-      status: "intake",
-      notes: form.notes || null,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Filing created");
-    setNewOpen(false);
-    refresh(userId);
-  }
-
   async function deleteFiling(id: string) {
     if (!userId) return;
     if (!confirm("Delete this filing? Documents stay in your library.")) return;
@@ -97,22 +134,31 @@ function Portal() {
     refresh(userId);
   }
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>, filingId: string | null) {
-    if (!userId || !e.target.files?.length) return;
-    const file = e.target.files[0];
+  async function uploadFiles(files: FileList | File[], filingId: string | null) {
+    if (!userId) return;
+    const list = Array.from(files);
+    if (!list.length) return;
     setUploadingFor(filingId ?? "library");
-    const path = `${userId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
-    const up = await supabase.storage.from("client-documents").upload(path, file);
-    if (up.error) { setUploadingFor(null); return toast.error(up.error.message); }
-    const { error } = await supabase.from("documents").insert({
-      user_id: userId, filing_id: filingId, storage_path: path,
-      file_name: file.name, mime_type: file.type, size_bytes: file.size,
-    });
+    let ok = 0;
+    for (const file of list) {
+      const path = `${userId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+      const up = await supabase.storage.from("client-documents").upload(path, file);
+      if (up.error) { toast.error(`${file.name}: ${up.error.message}`); continue; }
+      const { error } = await supabase.from("documents").insert({
+        user_id: userId, filing_id: filingId, storage_path: path,
+        file_name: file.name, mime_type: file.type, size_bytes: file.size,
+      });
+      if (error) toast.error(`${file.name}: ${error.message}`); else ok++;
+    }
     setUploadingFor(null);
-    e.target.value = "";
-    if (error) return toast.error(error.message);
-    toast.success("Uploaded");
+    if (ok) toast.success(`Uploaded ${ok} file${ok > 1 ? "s" : ""}`);
     refresh(userId);
+  }
+
+  async function onUploadInput(e: React.ChangeEvent<HTMLInputElement>, filingId: string | null) {
+    if (!e.target.files?.length) return;
+    await uploadFiles(e.target.files, filingId);
+    e.target.value = "";
   }
 
   async function downloadDoc(d: DocRow) {
@@ -126,6 +172,14 @@ function Portal() {
     if (!confirm(`Delete ${d.file_name}?`)) return;
     await supabase.storage.from("client-documents").remove([d.storage_path]);
     const { error } = await supabase.from("documents").delete().eq("id", d.id);
+    if (error) return toast.error(error.message);
+    if (userId) refresh(userId);
+  }
+
+  async function updateStatus(id: string, status: string) {
+    const patch: { status: string; filed_date?: string } = { status };
+    if (status === "filed") patch.filed_date = new Date().toISOString().slice(0, 10);
+    const { error } = await supabase.from("filings").update(patch).eq("id", id);
     if (error) return toast.error(error.message);
     if (userId) refresh(userId);
   }
@@ -145,13 +199,16 @@ function Portal() {
           <p className="mt-1 text-sm text-muted-foreground">{email}</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={newOpen} onOpenChange={setNewOpen}>
+          <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90">
-                <Plus className="h-4 w-4 mr-1" /> New filing
+                <Plus className="h-4 w-4 mr-1" /> Start a filing
               </Button>
             </DialogTrigger>
-            <NewFilingDialog onCreate={createFiling} />
+            <FilingWizard
+              userId={userId}
+              onDone={() => { setWizardOpen(false); if (userId) refresh(userId); }}
+            />
           </Dialog>
           <Button variant="ghost" onClick={signOut}>Sign out</Button>
         </div>
@@ -160,7 +217,7 @@ function Portal() {
       <section className="mt-10 grid gap-4">
         {filings.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center">
-            <p className="text-muted-foreground">No filings yet. Create one to track its status and attach documents.</p>
+            <p className="text-muted-foreground">No filings yet. Start a guided filing to add details, work through a checklist, and upload documents in one flow.</p>
           </div>
         )}
         {filings.map((f) => {
@@ -179,15 +236,23 @@ function Portal() {
                     {f.due_date && <> · Due {f.due_date}</>}
                     {f.filed_date && <> · Filed {f.filed_date}</>}
                   </p>
-                  {f.notes && <p className="mt-3 text-sm">{f.notes}</p>}
+                  {f.notes && <p className="mt-3 text-sm whitespace-pre-wrap">{f.notes}</p>}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  <Select value={f.status} onValueChange={(v) => updateStatus(f.id, v)}>
+                    <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(STATUS_LABEL).map(([v, m]) => (
+                        <SelectItem key={v} value={v}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <label className="cursor-pointer">
-                    <input type="file" className="hidden"
-                      onChange={(e) => onUpload(e, f.id)} disabled={uploadingFor !== null} />
+                    <input type="file" multiple className="hidden"
+                      onChange={(e) => onUploadInput(e, f.id)} disabled={uploadingFor !== null} />
                     <span className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent">
                       <Upload className="h-4 w-4 mr-1" />
-                      {uploadingFor === f.id ? "Uploading…" : "Upload"}
+                      {uploadingFor === f.id ? "Uploading…" : "Add docs"}
                     </span>
                   </label>
                   <Button variant="ghost" size="icon" onClick={() => deleteFiling(f.id)}>
@@ -225,8 +290,8 @@ function Portal() {
         <div className="flex items-center justify-between">
           <h3 className="font-display text-2xl">Document library</h3>
           <label className="cursor-pointer">
-            <input type="file" className="hidden"
-              onChange={(e) => onUpload(e, null)} disabled={uploadingFor !== null} />
+            <input type="file" multiple className="hidden"
+              onChange={(e) => onUploadInput(e, null)} disabled={uploadingFor !== null} />
             <span className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent">
               <Upload className="h-4 w-4 mr-1" />
               {uploadingFor === "library" ? "Uploading…" : "Upload"}
@@ -266,48 +331,206 @@ function Portal() {
   );
 }
 
-const FILING_TYPES = [
-  "Personal T1 return",
-  "Corporate T2 return",
-  "GST/HST return",
-  "Payroll remittance",
-  "Cross-border (US/CA)",
-  "Other",
-];
+/* ------------------------------ Wizard ------------------------------ */
 
-function NewFilingDialog({ onCreate }: { onCreate: (f: { tax_year: number; filing_type: string; notes: string }) => void }) {
+const STEPS = ["Details", "Checklist", "Documents", "Review"] as const;
+
+function FilingWizard({ userId, onDone }: { userId: string | null; onDone: () => void }) {
   const now = new Date().getFullYear();
+  const [step, setStep] = useState(0);
   const [tax_year, setYear] = useState(now - 1);
   const [filing_type, setType] = useState(FILING_TYPES[0]);
+  const [due_date, setDue] = useState("");
   const [notes, setNotes] = useState("");
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const items = useMemo(() => CHECKLISTS[filing_type] ?? CHECKLISTS.Other, [filing_type]);
+  const checkedCount = items.filter((i) => checked[i]).length;
+
+  function next() { setStep((s) => Math.min(STEPS.length - 1, s + 1)); }
+  function back() { setStep((s) => Math.max(0, s - 1)); }
+
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    setFiles((prev) => [...prev, ...Array.from(list)]);
+  }
+
+  async function submit() {
+    if (!userId) return;
+    setBusy(true);
+    const checklistNote = items.length
+      ? `Checklist:\n${items.map((i) => `${checked[i] ? "[x]" : "[ ]"} ${i}`).join("\n")}`
+      : "";
+    const fullNotes = [notes.trim(), checklistNote].filter(Boolean).join("\n\n");
+
+    const { data: created, error } = await supabase.from("filings").insert({
+      user_id: userId,
+      tax_year,
+      filing_type,
+      status: "intake",
+      due_date: due_date || null,
+      notes: fullNotes || null,
+    }).select("id").single();
+
+    if (error || !created) { setBusy(false); return toast.error(error?.message ?? "Could not create filing"); }
+
+    if (files.length) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const path = `${userId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+        const up = await supabase.storage.from("client-documents").upload(path, file);
+        if (!up.error) {
+          await supabase.from("documents").insert({
+            user_id: userId, filing_id: created.id, storage_path: path,
+            file_name: file.name, mime_type: file.type, size_bytes: file.size,
+          });
+        }
+        setProgress(Math.round(((i + 1) / files.length) * 100));
+      }
+    }
+
+    setBusy(false);
+    toast.success("Filing started — we'll take it from here.");
+    onDone();
+  }
 
   return (
-    <DialogContent>
-      <DialogHeader><DialogTitle>New filing</DialogTitle></DialogHeader>
-      <div className="space-y-4">
-        <div>
-          <Label>Tax year</Label>
-          <Input type="number" value={tax_year} min={2000} max={now + 1}
-            onChange={(e) => setYear(parseInt(e.target.value || "0", 10))} className="mt-2" />
-        </div>
-        <div>
-          <Label>Filing type</Label>
-          <Select value={filing_type} onValueChange={setType}>
-            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {FILING_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Notes (optional)</Label>
-          <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
-            className="mt-2" maxLength={1000} />
-        </div>
+    <DialogContent className="max-w-2xl">
+      <DialogHeader>
+        <DialogTitle>Start a filing</DialogTitle>
+        <DialogDescription>
+          A guided intake — give us the details, check off what you've got, and upload it all in one go.
+        </DialogDescription>
+      </DialogHeader>
+
+      {/* Stepper */}
+      <ol className="flex items-center gap-2 text-xs">
+        {STEPS.map((label, i) => (
+          <li key={label} className="flex items-center gap-2 flex-1">
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full border ${
+              i < step ? "bg-primary text-primary-foreground border-primary"
+                : i === step ? "border-primary text-primary"
+                : "border-border text-muted-foreground"
+            }`}>
+              {i < step ? <Check className="h-3 w-3" /> : i + 1}
+            </span>
+            <span className={i === step ? "font-medium" : "text-muted-foreground"}>{label}</span>
+            {i < STEPS.length - 1 && <span className="flex-1 h-px bg-border" />}
+          </li>
+        ))}
+      </ol>
+
+      <div className="min-h-[280px] pt-2">
+        {step === 0 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Tax year</Label>
+                <Input type="number" value={tax_year} min={2000} max={now + 1}
+                  onChange={(e) => setYear(parseInt(e.target.value || "0", 10))} className="mt-2" />
+              </div>
+              <div>
+                <Label>Due date (optional)</Label>
+                <Input type="date" value={due_date} onChange={(e) => setDue(e.target.value)} className="mt-2" />
+              </div>
+            </div>
+            <div>
+              <Label>Filing type</Label>
+              <Select value={filing_type} onValueChange={(v) => { setType(v); setChecked({}); }}>
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FILING_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Anything we should know? (optional)</Label>
+              <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+                className="mt-2" maxLength={1000}
+                placeholder="Life changes, new income sources, special circumstances…" />
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Tick what you have ready. Missing items? No problem — you can add them later.
+            </p>
+            <ul className="rounded-xl border border-border divide-y divide-border">
+              {items.map((item) => (
+                <li key={item} className="flex items-center gap-3 p-3">
+                  <Checkbox id={item} checked={!!checked[item]}
+                    onCheckedChange={(v) => setChecked((c) => ({ ...c, [item]: !!v }))} />
+                  <label htmlFor={item} className="text-sm cursor-pointer flex-1">{item}</label>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">{checkedCount} of {items.length} ready</p>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-3">
+            <label className="block cursor-pointer rounded-xl border border-dashed border-border p-8 text-center hover:bg-accent/40">
+              <input type="file" multiple className="hidden"
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+              <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+              <p className="mt-2 text-sm">Click to add files (you can select many at once)</p>
+              <p className="text-xs text-muted-foreground">PDF, images, spreadsheets — anything relevant</p>
+            </label>
+            {files.length > 0 && (
+              <ul className="rounded-xl border border-border divide-y divide-border max-h-48 overflow-auto">
+                {files.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between p-2 text-sm">
+                    <span className="truncate flex-1 mr-2">{f.name}</span>
+                    <span className="text-xs text-muted-foreground mr-2">{(f.size / 1024).toFixed(0)} KB</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                      onClick={() => setFiles((arr) => arr.filter((_, j) => j !== i))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4 text-sm">
+            <div className="rounded-xl border border-border p-4 space-y-1">
+              <p><span className="text-muted-foreground">Filing:</span> {filing_type} · {tax_year}</p>
+              {due_date && <p><span className="text-muted-foreground">Due:</span> {due_date}</p>}
+              <p><span className="text-muted-foreground">Checklist:</span> {checkedCount} of {items.length} ready</p>
+              <p><span className="text-muted-foreground">Documents:</span> {files.length} file{files.length === 1 ? "" : "s"}</p>
+              {notes && <p className="pt-1 whitespace-pre-wrap"><span className="text-muted-foreground">Notes:</span> {notes}</p>}
+            </div>
+            {busy && files.length > 0 && (
+              <div>
+                <Progress value={progress} />
+                <p className="mt-2 text-xs text-muted-foreground">Uploading documents… {progress}%</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      <DialogFooter>
-        <Button onClick={() => onCreate({ tax_year, filing_type, notes })}
-          className="bg-primary hover:bg-primary/90">Create filing</Button>
+
+      <DialogFooter className="sm:justify-between">
+        <Button variant="ghost" onClick={back} disabled={step === 0 || busy}>
+          <ChevronLeft className="h-4 w-4 mr-1" /> Back
+        </Button>
+        {step < STEPS.length - 1 ? (
+          <Button onClick={next} className="bg-primary hover:bg-primary/90">
+            Next <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        ) : (
+          <Button onClick={submit} disabled={busy} className="bg-primary hover:bg-primary/90">
+            {busy ? "Submitting…" : "Submit filing"}
+          </Button>
+        )}
       </DialogFooter>
     </DialogContent>
   );
