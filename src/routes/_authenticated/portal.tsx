@@ -177,7 +177,7 @@ function Portal() {
   }
 
   async function updateStatus(id: string, status: string) {
-    const patch: Record<string, unknown> = { status };
+    const patch: { status: string; filed_date?: string } = { status };
     if (status === "filed") patch.filed_date = new Date().toISOString().slice(0, 10);
     const { error } = await supabase.from("filings").update(patch).eq("id", id);
     if (error) return toast.error(error.message);
